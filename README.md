@@ -45,7 +45,7 @@
 ### 方法一：直接下载使用（推荐普通用户）
 如果你不想写代码，只想使用插件，请按以下步骤操作：
 
-1. 进入本仓库的 [Releases 页面](https://github.com/momh55/cf-helper/releases)
+1. 进入本仓库的 [Releases 页面](https://github.com/momh55/cf-helper/releases)。
 2. 下载最新的 `chrome-mv3-prod.zip` 压缩包并解压。
 3. 打开 Chrome 浏览器，访问 `chrome://extensions/`。
 4. 开启右上角的 **"开发者模式"**。
@@ -60,19 +60,28 @@
    ```bash
    git clone [https://github.com/momh55/cf-helper.git](https://github.com/momh55/cf-helper.git)
    cd cf-helper
+   ```
 
-2.安装依赖
+2. **安装依赖**
+   ```bash
+   npm install
+   ```
 
-npm install
-3.启动开发服务
+3. **启动开发服务**
+   ```bash
+   npm run dev
+   ```
 
-npm run dev
-4.加载插件
+4. **加载插件**
+   - 打开 Chrome 浏览器，访问 `chrome://extensions/`。
+   - 开启右上角的 **"开发者模式" (Developer mode)**。
+   - 点击 **"加载已解压的扩展程序" (Load unpacked)**。
+   - 选择项目目录下的 `build/chrome-mv3-dev` 文件夹。
 
-打开 Chrome 浏览器，访问 chrome://extensions/。
+## 🤝 贡献
 
-开启右上角的 "开发者模式" (Developer mode)。
+欢迎提交 Issue 或 Pull Request 来改进这个项目！
 
-点击 "加载已解压的扩展程序" (Load unpacked)。
+## 📄 License
 
-选择项目目录下的 build/chrome-mv3-dev 文件夹。
+MIT
