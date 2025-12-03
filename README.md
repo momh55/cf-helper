@@ -5,7 +5,7 @@
 ![TypeScript](https://img.shields.io/badge/typescript-%23007ACC.svg?style=flat&logo=typescript&logoColor=white)
 ![Plasmo](https://img.shields.io/badge/built%20with-Plasmo-purple)
 
-**Codeforces Helper** 是一款旨在提升 Codeforces 刷题体验的现代化 Chrome 浏览器插件。它引入了类似 VS Code 的侧边栏文件树界面，提供了毫秒级的全网题目搜索、自定义题单管理、状态同步以及防剧透等高级功能。
+**Codeforces Helper** 是一款旨在提升 Codeforces 刷题体验的现代化 Chrome 浏览器插件。它提供了毫秒级的全网题目搜索、自定义题单管理、状态同步以及防剧透等高级功能。
 
 ## ✨ 核心特性
 
