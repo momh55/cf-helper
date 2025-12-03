@@ -1,0 +1,796 @@
+/* style.css - Codeforces Helper Ultimate Version */
+
+/* === 1. 主容器与布局 (Main Container & Layout) === */
+.cf-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    /* width 由 JS 动态控制 */
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    z-index: 10000;
+    display: flex;
+    flex-direction: column;
+    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    font-size: 13px;
+    user-select: none;
+    cursor: default;
+    box-shadow: 4px 0 15px rgba(0, 0, 0, 0.3);
+    border-right: 1px solid var(--border-color);
+    transition: background-color 0.3s, color 0.3s;
+}
+
+/* 垂直拖动条 (调整侧边栏宽度) */
+.resizer-vertical {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: ew-resize;
+    /* 左右箭头 */
+    z-index: 10002;
+    background: transparent;
+    transition: background 0.2s;
+}
+
+.resizer-vertical:hover,
+.resizer-vertical.active {
+    background: var(--accent-color);
+}
+
+/* 视图容器 */
+.view-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
+/* === 2. 头部与导航 (Header & Navigation) === */
+.header {
+    height: 40px;
+    padding: 0 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background-color: var(--bg-header);
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border-color);
+    letter-spacing: 0.5px;
+}
+
+.icon-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-dim);
+    font-size: 16px;
+    padding: 4px 6px;
+    border-radius: 4px;
+    transition: 0.2s;
+}
+
+.icon-btn:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-main);
+}
+
+.active-view-btn {
+    background-color: var(--accent-color);
+    color: white !important;
+}
+
+/* 悬浮开关按钮 */
+.cf-toggle-btn {
+    position: fixed;
+    top: 80px;
+    left: 0;
+    z-index: 9999;
+    background-color: var(--accent-color);
+    color: white;
+    padding: 8px;
+    border: none;
+    border-radius: 0 4px 4px 0;
+    cursor: pointer;
+    box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+    font-weight: bold;
+}
+
+/* === 3. 当前题目面板 (Active Problem Panel) === */
+.active-panel {
+    background-color: var(--bg-secondary);
+    padding: 10px;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.active-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.active-badge {
+    background: var(--accent-color);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: bold;
+    margin-right: 5px;
+}
+
+.add-row {
+    display: flex;
+    gap: 5px;
+}
+
+.folder-select {
+    flex: 1;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    border-radius: 2px;
+    padding: 4px;
+    font-size: 11px;
+    outline: none;
+}
+
+.add-btn {
+    background: #098658;
+    /* VS Code Green */
+    color: white;
+    border: none;
+    padding: 4px 10px;
+    border-radius: 2px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.add-btn:hover {
+    background: #0bb375;
+}
+
+/* === 4. 搜索与筛选 (Search & Filters) === */
+.search-container {
+    background-color: var(--bg-main);
+    border-bottom: 1px solid var(--border-color);
+    padding: 8px;
+    flex-shrink: 0;
+}
+
+.search-input {
+    width: 100%;
+    box-sizing: border-box;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 5px 8px;
+    border-radius: 2px;
+    outline: none;
+    font-size: 12px;
+}
+
+.search-input:focus {
+    border-color: var(--accent-color);
+}
+
+.filter-row {
+    display: flex;
+    gap: 5px;
+    margin-top: 5px;
+    align-items: center;
+}
+
+.filter-input {
+    flex: 1;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 3px 6px;
+    border-radius: 2px;
+    outline: none;
+    font-size: 11px;
+    text-align: center;
+}
+
+.filter-input::placeholder {
+    color: var(--text-dim);
+}
+
+.filter-sep {
+    color: var(--text-dim);
+    font-size: 12px;
+}
+
+.index-status {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    display: flex;
+    justify-content: space-between;
+}
+
+/* === 5. 列表区域与分栏 (List Sections) === */
+/* Tags/Global Search Area */
+.section-tags {
+    flex: 1;
+    /* 自动占满上方空间 */
+    overflow-y: auto;
+    min-height: 50px;
+    padding-bottom: 10px;
+}
+
+/* 水平拖动条 (调整 My List 高度) */
+.resizer-horizontal {
+    height: 6px;
+    background: var(--bg-secondary);
+    cursor: ns-resize;
+    /* 上下箭头 */
+    flex-shrink: 0;
+    border-top: 1px solid var(--border-color);
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.2s;
+    z-index: 10001;
+}
+
+.resizer-horizontal:hover,
+.resizer-horizontal.active {
+    background: var(--accent-color);
+}
+
+/* My Lists Area */
+.section-mylist {
+    /* height 由 JS 控制 */
+    flex-shrink: 0;
+    overflow-y: auto;
+    background-color: var(--bg-secondary);
+    min-height: 50px;
+    max-height: 80%;
+}
+
+/* 分区标题 */
+.section-title {
+    padding: 8px 10px;
+    font-size: 11px;
+    font-weight: bold;
+    background-color: var(--bg-main);
+    /* 必须不透明 */
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    border-bottom: 1px solid var(--border-color);
+    border-top: 1px solid var(--border-color);
+    /* 分割线 */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.action-icon {
+    cursor: pointer;
+    font-size: 14px;
+    margin-left: 8px;
+    color: var(--text-dim);
+    transition: color 0.2s;
+}
+
+.action-icon:hover {
+    color: var(--text-main);
+}
+
+/* === 6. 文件夹与题目项 (Folders & Problems) === */
+.folder-header {
+    padding: 6px 0 6px 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    color: var(--text-main);
+    position: relative;
+    transition: background-color 0.1s;
+}
+
+.folder-header:hover {
+    background-color: var(--bg-hover);
+}
+
+.arrow {
+    width: 16px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-dim);
+    margin-right: 4px;
+    transition: transform 0.1s;
+}
+
+.folder.open .arrow {
+    transform: rotate(90deg);
+}
+
+.delete-btn {
+    display: none;
+    margin-left: auto;
+    margin-right: 10px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text-dim);
+}
+
+.folder-header:hover .delete-btn {
+    display: block;
+}
+
+.delete-btn:hover {
+    color: #ff6b6b;
+}
+
+.problem-list {
+    display: none;
+}
+
+.folder.open .problem-list {
+    display: block;
+}
+
+/* 题目单项 */
+.problem-item {
+    padding: 5px 10px 5px 25px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--border-color);
+    position: relative;
+    transition: background-color 0.1s;
+}
+
+.problem-item:hover {
+    background-color: var(--bg-hover);
+}
+
+.problem-row-top {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    gap: 6px;
+}
+
+/* 状态图标容器 (对齐用) */
+.status-container {
+    width: 16px;
+    height: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-right: 2px;
+}
+
+.problem-id {
+    color: var(--text-main);
+    font-weight: bold;
+    font-size: 13px;
+    min-width: 35px;
+    flex-shrink: 0;
+}
+
+.problem-rating {
+    font-size: 11px;
+    font-weight: bold;
+    padding: 0 4px;
+    border-radius: 3px;
+    background: rgba(128, 128, 128, 0.15);
+    flex-shrink: 0;
+    min-width: 25px;
+    text-align: center;
+}
+
+.problem-name {
+    color: var(--text-dim);
+    font-size: 12px;
+    flex: 1;
+    min-width: 0;
+    /* 允许文本溢出省略 */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* 题目删除按钮 X */
+.prob-delete-btn {
+    visibility: hidden;
+    color: var(--text-dim);
+    font-weight: bold;
+    font-size: 16px;
+    margin-left: 5px;
+    padding: 0 4px;
+    flex-shrink: 0;
+    z-index: 10;
+}
+
+.problem-item:hover .prob-delete-btn {
+    visibility: visible;
+}
+
+.prob-delete-btn:hover {
+    color: #ff6b6b;
+    background-color: rgba(255, 0, 0, 0.1);
+    border-radius: 3px;
+}
+
+.problem-row-btm {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 3px;
+}
+
+.tag-badge {
+    font-size: 9px;
+    padding: 1px 4px;
+    background: var(--bg-input);
+    color: #569cd6;
+    border-radius: 3px;
+    border: 1px solid var(--border-color);
+    transition: all 0.2s;
+}
+
+/* 模糊防剧透 */
+.tag-badge.blurred {
+    filter: blur(4px);
+    opacity: 0.6;
+    cursor: help;
+    user-select: none;
+}
+
+.tag-badge.blurred:hover {
+    filter: blur(0);
+    opacity: 1;
+}
+
+/* === 7. 比赛列表 (Contest List) === */
+.contest-tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-main);
+    flex-shrink: 0;
+}
+
+.contest-tab {
+    flex: 1;
+    text-align: center;
+    padding: 8px 0;
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--text-dim);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+}
+
+.contest-tab:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-main);
+}
+
+.contest-tab.active {
+    color: var(--accent-color);
+    border-bottom: 2px solid var(--accent-color);
+    background-color: var(--bg-secondary);
+}
+
+.contest-list-container {
+    flex: 1;
+    overflow-y: auto;
+    padding-bottom: 20px;
+}
+
+.contest-item {
+    padding: 12px 10px;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    gap: 8px;
+    cursor: pointer;
+    align-items: flex-start;
+}
+
+.contest-item:hover {
+    background-color: var(--bg-hover);
+}
+
+.contest-status {
+    width: 14px;
+    flex-shrink: 0;
+    margin-top: 2px;
+    display: flex;
+    justify-content: center;
+}
+
+.contest-details {
+    flex: 1;
+    overflow: hidden;
+}
+
+.contest-name {
+    font-weight: bold;
+    color: var(--text-main);
+    font-size: 12px;
+    margin-bottom: 4px;
+}
+
+.contest-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-dim);
+}
+
+.contest-time {
+    font-weight: bold;
+    color: var(--accent-color);
+}
+
+/* === 8. 设置与杂项 (Settings) === */
+.settings-panel {
+    padding: 15px;
+    color: var(--text-main);
+    overflow-y: auto;
+}
+
+.settings-group {
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: 15px;
+}
+
+.settings-group-title {
+    font-weight: bold;
+    color: var(--text-main);
+    margin-bottom: 10px;
+    font-size: 12px;
+    opacity: 0.7;
+}
+
+.settings-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+/* 开关组件 */
+.switch {
+    position: relative;
+    display: inline-block;
+    width: 34px;
+    height: 18px;
+}
+
+.switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-color);
+    transition: .4s;
+    border-radius: 18px;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 12px;
+    width: 12px;
+    left: 2px;
+    bottom: 2px;
+    background-color: var(--text-dim);
+    transition: .4s;
+    border-radius: 50%;
+}
+
+input:checked+.slider {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+}
+
+input:checked+.slider:before {
+    transform: translateX(16px);
+    background-color: white;
+}
+
+/* 输入框 */
+.cf-input {
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 4px;
+    border-radius: 3px;
+    width: 100px;
+}
+
+/* 同步按钮 */
+.sync-btn {
+    background: var(--bg-input);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    padding: 4px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-left: 5px;
+    font-size: 11px;
+}
+
+.sync-btn:hover {
+    background: var(--accent-color);
+    color: white;
+}
+
+/* 颜色选择器 */
+.color-picker-input {
+    border: none;
+    width: 40px;
+    height: 25px;
+    padding: 0;
+    cursor: pointer;
+    background: transparent;
+}
+
+/* 备份按钮 */
+.backup-btn {
+    width: 100%;
+    padding: 8px;
+    margin-top: 5px;
+    background: var(--bg-input);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.backup-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--accent-color);
+}
+
+/* === 9. 模态框与右键菜单 (Modals & Context Menu) === */
+.modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    z-index: 20;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background: var(--bg-main);
+    border: 1px solid var(--border-color);
+    width: 90%;
+    max-height: 90%;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
+    border-radius: 4px;
+}
+
+.modal-title {
+    font-weight: bold;
+    color: var(--text-main);
+    margin-bottom: 10px;
+}
+
+.import-textarea {
+    background: var(--bg-input);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    resize: none;
+    height: 150px;
+    font-family: monospace;
+    padding: 5px;
+    font-size: 11px;
+    margin-bottom: 10px;
+    outline: none;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.btn-primary {
+    background: var(--accent-color);
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+.btn-secondary {
+    background: var(--bg-input);
+    color: var(--text-main);
+    border: 1px solid var(--border-color);
+    padding: 5px 10px;
+    cursor: pointer;
+    border-radius: 3px;
+}
+
+/* 右键菜单 */
+.context-menu {
+    position: fixed;
+    z-index: 10005;
+    background: var(--bg-main);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    border-radius: 4px;
+    padding: 4px 0;
+    min-width: 150px;
+    font-family: "Segoe UI", sans-serif;
+    font-size: 12px;
+}
+
+.context-menu-item {
+    padding: 6px 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    color: var(--text-main);
+}
+
+.context-menu-item:hover {
+    background-color: var(--accent-color);
+    color: white;
+}
+
+.context-menu-divider {
+    height: 1px;
+    background-color: var(--border-color);
+    margin: 4px 0;
+}
+
+.context-menu-label {
+    margin-left: 8px;
+}
+
+/* === 10. 滚动条美化 === */
+::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-main);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--bg-input);
+    border: 1px solid var(--bg-main);
+    border-radius: 5px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-dim);
+}

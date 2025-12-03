@@ -1,0 +1,32 @@
+{
+  "name": "cf-helper",
+  "displayName": "Codeforces Helper",
+  "version": "0.0.1",
+  "description": "CF Helper",
+  "author": "Me",
+  "scripts": {
+    "dev": "plasmo dev",
+    "build": "plasmo build",
+    "package": "plasmo package"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-dom": "18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "18.2.0",
+    "@types/react-dom": "18.2.0",
+    "@types/chrome": "0.0.258",
+    "plasmo": "latest",
+    "typescript": "5.2.2"
+  },
+  "manifest": {
+    "permissions": [
+      "storage",
+      "unlimitedStorage"
+    ],
+    "host_permissions": [
+      "https://codeforces.com/*"
+    ]
+  }
+}
