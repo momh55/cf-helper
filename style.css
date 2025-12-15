@@ -1,27 +1,22 @@
-/* style.css - Codeforces Helper Ultimate Version */
-
-/* === 1. 主容器与布局 (Main Container & Layout) === */
 .cf-sidebar {
     position: fixed;
     top: 0;
     left: 0;
     bottom: 0;
-    /* width 由 JS 动态控制 */
     background-color: var(--bg-main);
     color: var(--text-main);
     z-index: 10000;
     display: flex;
     flex-direction: column;
-    font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, Roboto, sans-serif;
+    font-family: "Segoe UI", sans-serif;
     font-size: 13px;
     user-select: none;
     cursor: default;
-    box-shadow: 4px 0 15px rgba(0, 0, 0, 0.3);
+    box-shadow: 4px 0 10px rgba(0, 0, 0, 0.3);
     border-right: 1px solid var(--border-color);
     transition: background-color 0.3s, color 0.3s;
 }
 
-/* 垂直拖动条 (调整侧边栏宽度) */
 .resizer-vertical {
     position: absolute;
     right: 0;
@@ -29,7 +24,6 @@
     bottom: 0;
     width: 8px;
     cursor: ew-resize;
-    /* 左右箭头 */
     z-index: 10002;
     background: transparent;
     transition: background 0.2s;
@@ -40,28 +34,17 @@
     background: var(--accent-color);
 }
 
-/* 视图容器 */
-.view-container {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    position: relative;
-}
-
-/* === 2. 头部与导航 (Header & Navigation) === */
 .header {
     height: 40px;
     padding: 0 10px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    background-color: var(--bg-header);
+    background-color: var(--bg-main);
     font-size: 11px;
     font-weight: 700;
     flex-shrink: 0;
     border-bottom: 1px solid var(--border-color);
-    letter-spacing: 0.5px;
 }
 
 .icon-btn {
@@ -72,7 +55,6 @@
     font-size: 16px;
     padding: 4px 6px;
     border-radius: 4px;
-    transition: 0.2s;
 }
 
 .icon-btn:hover {
@@ -85,7 +67,6 @@
     color: white !important;
 }
 
-/* 悬浮开关按钮 */
 .cf-toggle-btn {
     position: fixed;
     top: 80px;
@@ -98,10 +79,16 @@
     border-radius: 0 4px 4px 0;
     cursor: pointer;
     box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
-    font-weight: bold;
 }
 
-/* === 3. 当前题目面板 (Active Problem Panel) === */
+.view-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+}
+
 .active-panel {
     background-color: var(--bg-secondary);
     padding: 10px;
@@ -137,33 +124,32 @@
     border: 1px solid var(--border-color);
     color: var(--text-main);
     border-radius: 2px;
-    padding: 4px;
-    font-size: 11px;
-    outline: none;
+    padding: 2px;
 }
 
 .add-btn {
     background: #098658;
-    /* VS Code Green */
     color: white;
     border: none;
     padding: 4px 10px;
     border-radius: 2px;
     cursor: pointer;
-    font-size: 11px;
-    font-weight: 600;
 }
 
-.add-btn:hover {
-    background: #0bb375;
-}
-
-/* === 4. 搜索与筛选 (Search & Filters) === */
+/* === Search & Filter (Updated) === */
 .search-container {
     background-color: var(--bg-main);
     border-bottom: 1px solid var(--border-color);
     padding: 8px;
     flex-shrink: 0;
+}
+
+/* 1. 搜索框包装器：用于定位 X 按钮 */
+.search-input-wrapper {
+    position: relative;
+    flex: 1;
+    display: flex;
+    align-items: center;
 }
 
 .search-input {
@@ -172,14 +158,35 @@
     background-color: var(--bg-input);
     border: 1px solid var(--border-color);
     color: var(--text-main);
-    padding: 5px 8px;
+    padding: 5px 24px 5px 8px;
+    /* 右边留出空位给 X */
     border-radius: 2px;
     outline: none;
-    font-size: 12px;
 }
 
 .search-input:focus {
     border-color: var(--accent-color);
+}
+
+/* 2. 清空按钮样式 */
+.search-clear-btn {
+    position: absolute;
+    right: 6px;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+}
+
+.search-clear-btn:hover {
+    color: var(--text-main);
+    background-color: var(--bg-hover);
 }
 
 .filter-row {
@@ -218,22 +225,17 @@
     justify-content: space-between;
 }
 
-/* === 5. 列表区域与分栏 (List Sections) === */
-/* Tags/Global Search Area */
+/* === Areas === */
 .section-tags {
     flex: 1;
-    /* 自动占满上方空间 */
     overflow-y: auto;
     min-height: 50px;
-    padding-bottom: 10px;
 }
 
-/* 水平拖动条 (调整 My List 高度) */
 .resizer-horizontal {
     height: 6px;
     background: var(--bg-secondary);
     cursor: ns-resize;
-    /* 上下箭头 */
     flex-shrink: 0;
     border-top: 1px solid var(--border-color);
     border-bottom: 1px solid var(--border-color);
@@ -246,9 +248,7 @@
     background: var(--accent-color);
 }
 
-/* My Lists Area */
 .section-mylist {
-    /* height 由 JS 控制 */
     flex-shrink: 0;
     overflow-y: auto;
     background-color: var(--bg-secondary);
@@ -256,13 +256,12 @@
     max-height: 80%;
 }
 
-/* 分区标题 */
+/* === Lists === */
 .section-title {
     padding: 8px 10px;
     font-size: 11px;
     font-weight: bold;
     background-color: var(--bg-main);
-    /* 必须不透明 */
     color: var(--text-dim);
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -271,25 +270,11 @@
     z-index: 5;
     border-bottom: 1px solid var(--border-color);
     border-top: 1px solid var(--border-color);
-    /* 分割线 */
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
-.action-icon {
-    cursor: pointer;
-    font-size: 14px;
-    margin-left: 8px;
-    color: var(--text-dim);
-    transition: color 0.2s;
-}
-
-.action-icon:hover {
-    color: var(--text-main);
-}
-
-/* === 6. 文件夹与题目项 (Folders & Problems) === */
 .folder-header {
     padding: 6px 0 6px 8px;
     cursor: pointer;
@@ -298,7 +283,6 @@
     font-weight: 600;
     color: var(--text-main);
     position: relative;
-    transition: background-color 0.1s;
 }
 
 .folder-header:hover {
@@ -311,7 +295,6 @@
     font-size: 14px;
     color: var(--text-dim);
     margin-right: 4px;
-    transition: transform 0.1s;
 }
 
 .folder.open .arrow {
@@ -324,7 +307,6 @@
     margin-right: 10px;
     cursor: pointer;
     font-size: 12px;
-    color: var(--text-dim);
 }
 
 .folder-header:hover .delete-btn {
@@ -343,13 +325,12 @@
     display: block;
 }
 
-/* 题目单项 */
+/* === Problem Items === */
 .problem-item {
     padding: 5px 10px 5px 25px;
     cursor: pointer;
     border-bottom: 1px solid var(--border-color);
     position: relative;
-    transition: background-color 0.1s;
 }
 
 .problem-item:hover {
@@ -363,7 +344,6 @@
     gap: 6px;
 }
 
-/* 状态图标容器 (对齐用) */
 .status-container {
     width: 16px;
     height: 16px;
@@ -398,20 +378,17 @@
     font-size: 12px;
     flex: 1;
     min-width: 0;
-    /* 允许文本溢出省略 */
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-/* 题目删除按钮 X */
 .prob-delete-btn {
     visibility: hidden;
     color: var(--text-dim);
     font-weight: bold;
     font-size: 16px;
     margin-left: 5px;
-    padding: 0 4px;
     flex-shrink: 0;
     z-index: 10;
 }
@@ -422,8 +399,6 @@
 
 .prob-delete-btn:hover {
     color: #ff6b6b;
-    background-color: rgba(255, 0, 0, 0.1);
-    border-radius: 3px;
 }
 
 .problem-row-btm {
@@ -440,10 +415,8 @@
     color: #569cd6;
     border-radius: 3px;
     border: 1px solid var(--border-color);
-    transition: all 0.2s;
 }
 
-/* 模糊防剧透 */
 .tag-badge.blurred {
     filter: blur(4px);
     opacity: 0.6;
@@ -456,7 +429,7 @@
     opacity: 1;
 }
 
-/* === 7. 比赛列表 (Contest List) === */
+/* === Contest List === */
 .contest-tabs {
     display: flex;
     border-bottom: 1px solid var(--border-color);
@@ -537,7 +510,42 @@
     color: var(--accent-color);
 }
 
-/* === 8. 设置与杂项 (Settings) === */
+/* === Data Manager (NEW) === */
+.data-panel {
+    padding: 15px;
+    color: var(--text-main);
+    overflow-y: auto;
+}
+
+.data-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+    text-align: center;
+}
+
+.data-stat {
+    font-size: 24px;
+    font-weight: bold;
+    color: var(--accent-color);
+    margin: 10px 0;
+}
+
+.data-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 15px;
+}
+
+.sync-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+}
+
+/* === Settings & Modal === */
 .settings-panel {
     padding: 15px;
     color: var(--text-main);
@@ -565,7 +573,6 @@
     margin-bottom: 10px;
 }
 
-/* 开关组件 */
 .switch {
     position: relative;
     display: inline-block;
@@ -614,7 +621,6 @@ input:checked+.slider:before {
     background-color: white;
 }
 
-/* 输入框 */
 .cf-input {
     background: var(--bg-input);
     border: 1px solid var(--border-color);
@@ -624,7 +630,6 @@ input:checked+.slider:before {
     width: 100px;
 }
 
-/* 同步按钮 */
 .sync-btn {
     background: var(--bg-input);
     color: var(--text-main);
@@ -641,7 +646,6 @@ input:checked+.slider:before {
     color: white;
 }
 
-/* 颜色选择器 */
 .color-picker-input {
     border: none;
     width: 40px;
@@ -651,7 +655,6 @@ input:checked+.slider:before {
     background: transparent;
 }
 
-/* 备份按钮 */
 .backup-btn {
     width: 100%;
     padding: 8px;
@@ -669,7 +672,6 @@ input:checked+.slider:before {
     border-color: var(--accent-color);
 }
 
-/* === 9. 模态框与右键菜单 (Modals & Context Menu) === */
 .modal-overlay {
     position: absolute;
     top: 0;
@@ -692,7 +694,6 @@ input:checked+.slider:before {
     flex-direction: column;
     padding: 10px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
-    border-radius: 4px;
 }
 
 .modal-title {
@@ -738,7 +739,17 @@ input:checked+.slider:before {
     border-radius: 3px;
 }
 
-/* 右键菜单 */
+.action-icon {
+    cursor: pointer;
+    font-size: 14px;
+    margin-left: 8px;
+    color: var(--text-dim);
+}
+
+.action-icon:hover {
+    color: var(--text-main);
+}
+
 .context-menu {
     position: fixed;
     z-index: 10005;
@@ -775,7 +786,6 @@ input:checked+.slider:before {
     margin-left: 8px;
 }
 
-/* === 10. 滚动条美化 === */
 ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
@@ -785,12 +795,70 @@ input:checked+.slider:before {
     background: var(--bg-main);
 }
 
-::-webkit-scrollbar-thumb {
-    background: var(--bg-input);
-    border: 1px solid var(--bg-main);
-    border-radius: 5px;
+/* style.css (追加部分) */
+
+/* === Data Table === */
+.data-table-container {
+    margin-top: 15px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    overflow: hidden;
 }
 
-::-webkit-scrollbar-thumb:hover {
-    background: var(--text-dim);
+.data-header {
+    font-size: 11px;
+    font-weight: bold;
+    color: var(--text-dim);
+    padding: 5px 10px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border-color);
+    text-transform: uppercase;
+}
+
+.data-list {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.data-row {
+    display: flex;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 11px;
+    align-items: center;
+    cursor: pointer;
+}
+
+.data-row:hover {
+    background-color: var(--bg-hover);
+}
+
+.data-col-status {
+    width: 20px;
+    font-size: 14px;
+}
+
+.data-col-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.data-title {
+    color: var(--text-main);
+    font-weight: bold;
+    margin-bottom: 2px;
+}
+
+.data-meta {
+    color: var(--text-dim);
+    font-size: 10px;
+}
+
+.data-verdict-ok {
+    color: #4ec9b0;
+}
+
+.data-verdict-wrong {
+    color: #ff6b6b;
 }

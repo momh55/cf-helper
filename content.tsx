@@ -1,6 +1,7 @@
 import cssText from "data-text:~/style.css"
 import type { PlasmoCSConfig } from "plasmo"
 import { useState, useEffect, useMemo, useRef } from "react"
+import { initDB, saveSubmissions, getSubmissionCount, clearDB, getRecentSubmissions, querySubmissions } from "./db"
 
 export const config: PlasmoCSConfig = {
     matches: ["https://codeforces.com/*"]
@@ -22,7 +23,7 @@ type ContextMenuState = { visible: boolean; x: number; y: number; problem: Probl
 
 const CF_TAGS = ["dp", "greedy", "math", "graphs", "data structures", "sortings", "binary search", "dfs and similar", "trees", "strings", "number theory", "geometry", "two pointers", "dsu", "bitmasks", "constructive algorithms", "implementation"];
 
-// === Utils ===
+// === Global Utils ===
 const isDarkColor = (hex: string) => {
     const c = hex.substring(1); const rgb = parseInt(c, 16);
     const r = (rgb >> 16) & 0xff; const g = (rgb >> 8) & 0xff; const b = (rgb >> 0) & 0xff;
@@ -57,12 +58,41 @@ const formatDuration = (seconds: number) => {
     if (d > 0) return `${d}d ${h}h`; return `${h}h ${m}m`;
 }
 const formatTime = (unix: number) => new Date(unix * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const formatDateTime = (unix: number) => new Date(unix * 1000).toLocaleString();
 
-// === Component ===
+const downloadFile = (content: string, fileName: string, mimeType: string) => {
+    const blob = new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = fileName;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+}
+
+const formatFullDate = (unix: number) => {
+    const d = new Date(unix * 1000);
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+const formatVerdictDetailed = (verdict: string, passedCount: number) => {
+    if (!verdict) return "";
+    if (verdict === 'OK') return 'Accepted';
+    if (verdict === 'COMPILATION_ERROR') return 'Compilation Error';
+    let text = verdict.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase());
+    if (['Wrong Answer', 'Time Limit Exceeded', 'Memory Limit Exceeded', 'Runtime Error'].includes(text)) {
+        return `${text} on test ${passedCount + 1}`;
+    }
+    return text;
+}
+
+const formatMemoryKB = (bytes: number) => {
+    return Math.max(0, Math.round(bytes / 1024));
+}
+
+// === Main Component ===
 const CFHelperOverlay = () => {
-    // UI
+    // UI State
     const [isOpen, setIsOpen] = useState(false)
-    const [view, setView] = useState<"explorer" | "settings" | "contests">("explorer")
+    const [view, setView] = useState<"explorer" | "settings" | "contests" | "data">("explorer")
     const [contestTab, setContestTab] = useState<"upcoming" | "history">("upcoming")
     const [searchText, setSearchText] = useState("")
     const [isLoading, setIsLoading] = useState(false)
@@ -71,11 +101,18 @@ const CFHelperOverlay = () => {
     const [contextMenu, setContextMenu] = useState<ContextMenuState>({ visible: false, x: 0, y: 0, problem: null })
     const [now, setNow] = useState(Date.now())
 
+    // Data Sync & Export State
+    const [dbCount, setDbCount] = useState(0)
+    const [syncStatus, setSyncStatus] = useState("")
+    const [localPreview, setLocalPreview] = useState<any[]>([])
+    const [exportFormat, setExportFormat] = useState<"csv" | "json">("csv")
+    const [exportOnlyAC, setExportOnlyAC] = useState(false)
+
     // Filters
     const [minRating, setMinRating] = useState("")
     const [maxRating, setMaxRating] = useState("")
 
-    // Persistence
+    // Persistence State
     const [myListHeight, setMyListHeight] = useState(250)
     const [sidebarWidth, setSidebarWidth] = useState(300)
     const [expandedFolderIds, setExpandedFolderIds] = useState<string[]>([])
@@ -91,7 +128,7 @@ const CFHelperOverlay = () => {
     const dragValueRef = useRef(0)
     const fileInputRef = useRef<HTMLInputElement>(null)
 
-    // Data
+    // Data State
     const [activeProblem, setActiveProblem] = useState<Problem | null>(null)
     const [selectedFolderId, setSelectedFolderId] = useState<string>("")
     const [systemFolders, setSystemFolders] = useState<Folder[]>([])
@@ -101,247 +138,32 @@ const CFHelperOverlay = () => {
     const [upcomingContests, setUpcomingContests] = useState<Contest[]>([])
     const [historyContests, setHistoryContests] = useState<Contest[]>([])
 
-    const [settings, setSettings] = useState<Settings>({ keepOpen: false, showTags: true, blurTags: true, showSystemTags: true, showStatus: false, userHandle: "", bgColor: "#252526" })
+    const [settings, setSettings] = useState<Settings>({
+        keepOpen: false, showTags: true, blurTags: true, showSystemTags: true, showStatus: false, userHandle: "", bgColor: "#252526"
+    })
+
     const theme = useMemo(() => getThemeVariables(settings.bgColor), [settings.bgColor]);
 
-    // View Switcher
-    const handleSetView = (newView: "explorer" | "settings" | "contests") => {
+    // === Functions ===
+    const handleSetView = (newView: "explorer" | "settings" | "contests" | "data") => {
         setView(newView);
         chrome.storage.local.set({ "cf_active_view": newView });
+        if (newView === 'data') refreshDbCount();
     }
 
-    // Initialization
-    useEffect(() => {
-        chrome.storage.local.get(null, (res) => {
-            // 1. Layout & Settings
-            if (res.cf_mylist_height) setMyListHeight(res.cf_mylist_height);
-            if (res.cf_sidebar_width) setSidebarWidth(res.cf_sidebar_width);
-            if (res.cf_expanded_folders) setExpandedFolderIds(res.cf_expanded_folders);
-
-            const loadedSettings = { ...settings, ...res.cf_settings };
-            if (res.cf_settings) setSettings(loadedSettings);
-
-            if (loadedSettings.keepOpen && res.cf_sidebar_open) {
-                setIsOpen(true);
-                adjustBody(true, res.cf_sidebar_width || 300);
-            }
-            if (res.cf_active_view) setView(res.cf_active_view);
-
-            // 2. Folders
-            let loadedFolders: Folder[] = [];
-            if (res.cf_my_folders && res.cf_my_folders.length > 0) {
-                loadedFolders = res.cf_my_folders.map((f: any) => ({ ...f, isCustom: true }));
-            } else {
-                loadedFolders = [{ id: "fav_def", title: "My Favorites", problems: [], isCustom: true }];
-            }
-            setMyFolders(loadedFolders);
-            if (loadedFolders.length > 0) setSelectedFolderId(loadedFolders[0].id);
-
-            // 3. System Folders
-            if (res.cf_sys_folders) setSystemFolders(res.cf_sys_folders);
-            else setSystemFolders(CF_TAGS.map(tag => ({ id: `sys_${tag}`, title: tag.toUpperCase(), problems: [] })));
-
-            // 4. Global Cache
-            if (res.cf_all_problems_cache && Array.isArray(res.cf_all_problems_cache)) {
-                setAllProblemsCache(res.cf_all_problems_cache);
-            } else {
-                fetchCFProblems();
-            }
-
-            // 5. Status & Contests
-            if (res.cf_user_status) setUserStatus(res.cf_user_status);
-            if (loadedSettings.showStatus && loadedSettings.userHandle) fetchUserStatus(loadedSettings.userHandle, false);
-
-            if (res.cf_upcoming_contests) setUpcomingContests(res.cf_upcoming_contests);
-            if (res.cf_history_contests) setHistoryContests(res.cf_history_contests);
-            if (!res.cf_upcoming_contests) fetchContests(loadedSettings.userHandle);
-
-            // 6. Scroll
-            if (res.cf_scroll_pos) {
-                setTimeout(() => {
-                    if (tagsRef.current) tagsRef.current.scrollTop = res.cf_scroll_pos.tags || 0;
-                    if (myListRef.current) myListRef.current.scrollTop = res.cf_scroll_pos.mylist || 0;
-                }, 300);
-            }
-        });
-
-        checkUrl();
-        window.addEventListener('popstate', checkUrl);
-        window.addEventListener('click', () => setContextMenu({ ...contextMenu, visible: false }));
-        const timer = setInterval(() => setNow(Date.now()), 60000);
-
-        return () => {
-            window.removeEventListener('popstate', checkUrl);
-            clearInterval(timer);
-        }
-    }, [])
-
-    // Hotkeys
-    useEffect(() => {
-        const handleKey = (e: KeyboardEvent) => {
-            if (e.altKey && (e.code === 'KeyC' || e.key === 'c')) {
-                e.preventDefault();
-                setIsOpen(prev => {
-                    const next = !prev;
-                    const body = document.querySelector("body");
-                    if (body) body.style.marginLeft = next ? `${sidebarWidth}px` : "0px";
-                    if (settings.keepOpen) chrome.storage.local.set({ "cf_sidebar_open": next });
-                    return next;
-                });
-            }
-            if (e.altKey && (e.code === 'KeyS' || e.key === 's')) {
-                e.preventDefault();
-                setIsOpen(true);
-                const body = document.querySelector("body");
-                if (body) body.style.marginLeft = `${sidebarWidth}px`;
-                handleSetView('explorer');
-                setTimeout(() => document.querySelector<HTMLInputElement>('.search-input')?.focus(), 100);
-            }
-        };
-        window.addEventListener('keydown', handleKey);
-        return () => window.removeEventListener('keydown', handleKey);
-    }, [sidebarWidth, settings.keepOpen]);
-
-    // === UI Action Handlers ===
-    const adjustBody = (open: boolean, width: number = sidebarWidth) => {
-        const body = document.querySelector("body");
-        if (body) body.style.marginLeft = open ? `${width}px` : "0px";
-    }
-
-    const toggleSidebar = () => {
-        const s = !isOpen; setIsOpen(s); adjustBody(s);
-        if (settings.keepOpen) chrome.storage.local.set({ "cf_sidebar_open": s });
-    }
-
-    const toggleFolder = (fid: string) => {
-        setExpandedFolderIds(prev => {
-            const n = prev.includes(fid) ? prev.filter(i => i !== fid) : [...prev, fid];
-            chrome.storage.local.set({ "cf_expanded_folders": n }); return n;
-        });
-    }
-
-    const checkUrl = () => {
-        const u = window.location.href;
-        const m = u.match(/(?:contest|gym)\/(\d+)\/problem\/(\w+)/) || u.match(/problemset\/problem\/(\d+)\/(\w+)/);
-        if (m) {
-            let n = "Problem";
-            try { const t = document.title.split("-"); if (t.length >= 3) n = t[2].trim(); } catch (e) { }
-            setActiveProblem({ id: `${m[1]}${m[2]}`, name: n, tags: [] });
-        } else setActiveProblem(null);
+    const refreshDbCount = async () => {
+        const c = await getSubmissionCount();
+        setDbCount(c);
+        const recent = await getRecentSubmissions(50);
+        setLocalPreview(recent);
     }
 
     const updateSetting = (k: keyof Settings, v: any) => {
         const ns = { ...settings, [k]: v }; setSettings(ns);
         chrome.storage.local.set({ "cf_settings": ns });
-        if (k === "userHandle" && v && settings.showStatus) { fetchUserStatus(v); }
     }
 
-    const handleScroll = () => {
-        if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
-        scrollTimeout.current = setTimeout(() => {
-            chrome.storage.local.set({ "cf_scroll_pos": { tags: tagsRef.current?.scrollTop || 0, myList: myListRef.current?.scrollTop || 0 } });
-        }, 500);
-    }
-
-    // === Resizing Logic ===
-    const startResizeW = (e: React.MouseEvent) => { isDraggingW.current = true; startPos.current = e.clientX; startDim.current = sidebarWidth; dragValueRef.current = sidebarWidth; document.body.style.cursor = "ew-resize"; attachListeners(); }
-    const startResizeH = (e: React.MouseEvent) => { isDraggingH.current = true; startPos.current = e.clientY; startDim.current = myListHeight; dragValueRef.current = myListHeight; document.body.style.cursor = "ns-resize"; attachListeners(); }
-    const attachListeners = () => { document.addEventListener('mousemove', onMouseMove); document.addEventListener('mouseup', onMouseUp); }
-    const onMouseMove = (e: MouseEvent) => {
-        if (isDraggingW.current) { const d = e.clientX - startPos.current; const w = Math.max(200, Math.min(600, startDim.current + d)); setSidebarWidth(w); if (isOpen) adjustBody(true, w); dragValueRef.current = w; }
-        else if (isDraggingH.current) { const d = startPos.current - e.clientY; const h = Math.max(50, Math.min(800, startDim.current + d)); setMyListHeight(h); dragValueRef.current = h; }
-    }
-    const onMouseUp = () => {
-        if (isDraggingW.current) chrome.storage.local.set({ "cf_sidebar_width": dragValueRef.current });
-        else if (isDraggingH.current) chrome.storage.local.set({ "cf_mylist_height": dragValueRef.current });
-        isDraggingW.current = false; isDraggingH.current = false; document.body.style.cursor = "default"; document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp);
-    }
-
-    // === Data Operations ===
-    const addProblem = () => {
-        if (!activeProblem) return;
-        let targetId = selectedFolderId;
-        if (!targetId && myFolders.length > 0) { targetId = myFolders[0].id; setSelectedFolderId(targetId); }
-        if (!targetId) return;
-        const idx = myFolders.findIndex(f => f.id === targetId);
-        if (idx < 0) return;
-        if (myFolders[idx].problems.some(p => p.id === activeProblem.id)) { alert("Exists!"); return; }
-
-        // Find full info
-        const fullProblem = allProblemsCache.find(p => p.id === activeProblem.id) || activeProblem;
-        const nf = [...myFolders];
-        nf[idx].problems.push(fullProblem);
-        setMyFolders(nf);
-        chrome.storage.local.set({ "cf_my_folders": nf });
-        alert("Added!");
-    }
-
-    const deleteProblem = (folderId: string, problemId: string) => {
-        const folderIdx = myFolders.findIndex(f => f.id === folderId);
-        if (folderIdx === -1) return;
-        const newFolders = [...myFolders];
-        newFolders[folderIdx] = { ...newFolders[folderIdx], problems: newFolders[folderIdx].problems.filter(p => p.id !== problemId) };
-        setMyFolders(newFolders);
-        chrome.storage.local.set({ "cf_my_folders": newFolders });
-    }
-
-    const createFolder = () => { const n = prompt("Name:"); if (n) { const nf = [...myFolders, { id: `f_${Date.now()}`, title: n, problems: [], isCustom: true }]; setMyFolders(nf); chrome.storage.local.set({ "cf_my_folders": nf }); } }
-    const deleteFolder = (fid: string) => { if (confirm("Delete folder?")) { const nf = myFolders.filter(f => f.id !== fid); setMyFolders(nf); chrome.storage.local.set({ "cf_my_folders": nf }); } }
-
-    const handleImport = () => {
-        const lines = importText.split('\n').map(l => l.trim()).filter(l => l);
-        if (lines.length < 1) return;
-        const title = lines[0]; const problems: Problem[] = [];
-        const idRegex = /(\d+)([A-Z]\d?)/i;
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i];
-            let pId = "";
-            const urlMatch = line.match(/(?:contest|gym|problemset\/problem)\/(\d+)(?:\/problem\/|\/)(\w+)/);
-            if (urlMatch) pId = `${urlMatch[1]}${urlMatch[2]}`; else { const idMatch = line.match(idRegex); if (idMatch) pId = idMatch[0].toUpperCase(); }
-            if (pId) { const fullProblem = allProblemsCache.find(p => p.id === pId) || { id: pId, name: "Imported" }; problems.push(fullProblem); }
-        }
-        const newFolders = [...myFolders, { id: `fav_${Date.now()}`, title: title, problems: problems, isCustom: true }];
-        setMyFolders(newFolders);
-        chrome.storage.local.set({ "cf_my_folders": newFolders });
-        setShowImportModal(false);
-    }
-
-    const handleExportData = () => {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(myFolders));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", "cf_helper_backup.json");
-        document.body.appendChild(downloadAnchorNode);
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
-    }
-
-    const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader();
-        reader.onload = (event) => { try { const importedFolders = JSON.parse(event.target?.result as string); if (Array.isArray(importedFolders)) { const newFolders = importedFolders.map(f => ({ ...f, isCustom: true })); setMyFolders(newFolders); chrome.storage.local.set({ "cf_my_folders": newFolders }); alert("Data imported successfully!"); } else { alert("Invalid file format."); } } catch (err) { alert("Error parsing JSON file."); } };
-        reader.readAsText(file); e.target.value = "";
-    }
-
-    // --- API Calls ---
-    const fetchCFProblems = async () => {
-        setIsLoading(true);
-        try {
-            const res = await fetch("https://codeforces.com/api/problemset.problems");
-            const data = await res.json();
-            if (data.status === "OK") {
-                const rawProblems = data.result.problems.map((p: any) => ({ id: `${p.contestId}${p.index}`, name: p.name, tags: p.tags || [], rating: p.rating, contestId: p.contestId }));
-                setAllProblemsCache(rawProblems);
-                chrome.storage.local.set({ "cf_all_problems_cache": rawProblems });
-                const newSys = CF_TAGS.map(tag => {
-                    let pList = rawProblems.filter((p: any) => p.tags?.includes(tag)).sort((a: any, b: any) => b.contestId - a.contestId).slice(0, 20);
-                    return { id: `sys_${tag}`, title: tag.toUpperCase(), problems: pList };
-                });
-                setSystemFolders(newSys);
-                chrome.storage.local.set({ "cf_sys_folders": newSys });
-            }
-        } catch (e) { console.error(e); } finally { setIsLoading(false); }
-    }
-
+    // API
     const fetchUserStatus = async (handle: string, alertResult = false) => {
         if (!handle) return;
         try {
@@ -387,7 +209,139 @@ const CFHelperOverlay = () => {
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
     }
 
-    // --- Context Menu & Utils ---
+    const fetchCFProblems = async () => {
+        setIsLoading(true);
+        try {
+            const res = await fetch("https://codeforces.com/api/problemset.problems");
+            const data = await res.json();
+            if (data.status === "OK") {
+                const rawProblems = data.result.problems.map((p: any) => ({ id: `${p.contestId}${p.index}`, name: p.name, tags: p.tags || [], rating: p.rating, contestId: p.contestId }));
+                setAllProblemsCache(rawProblems);
+                chrome.storage.local.set({ "cf_all_problems_cache": rawProblems, "cf_cache_time": Date.now() });
+                const newSys = CF_TAGS.map(tag => {
+                    let pList = rawProblems.filter((p: any) => p.tags?.includes(tag)).sort((a: any, b: any) => b.contestId - a.contestId).slice(0, 20);
+                    return { id: `sys_${tag}`, title: tag.toUpperCase(), problems: pList };
+                });
+                setSystemFolders(newSys);
+                chrome.storage.local.set({ "cf_sys_folders": newSys });
+            }
+        } catch (e) { console.error(e); } finally { setIsLoading(false); }
+    }
+
+    // --- Core Features ---
+    const handleSyncData = async () => {
+        if (!settings.userHandle) { alert("Please set Handle first."); return; }
+        setSyncStatus("Fetching...");
+        try {
+            const res = await fetch(`https://codeforces.com/api/user.status?handle=${settings.userHandle}&from=1&count=10000`);
+            const data = await res.json();
+            if (data.status === "OK") {
+                setSyncStatus(`Saving...`);
+                await saveSubmissions(data.result);
+                setSyncStatus("Done!");
+                refreshDbCount();
+            } else {
+                setSyncStatus("Error: " + data.comment);
+            }
+        } catch (e) {
+            setSyncStatus("Network Error");
+        }
+    }
+
+    const handleClearDb = async () => {
+        if (confirm("Clear all local submission data?")) {
+            await clearDB();
+            refreshDbCount();
+            setSyncStatus("");
+        }
+    }
+
+    const handleExportHistory = async () => {
+        if (dbCount === 0) { alert("No data to export. Please Sync first."); return; }
+        setSyncStatus("Exporting...");
+        const data = await querySubmissions({ onlyAC: exportOnlyAC });
+        data.reverse(); // Newest first
+
+        if (exportFormat === 'json') {
+            downloadFile(JSON.stringify(data, null, 2), `cf_submissions_${settings.userHandle}.json`, "application/json");
+        } else {
+            const headers = ["Submission ID", "Contest", "Index", "Problem Name", "Rating", "Verdict", "Language", "Time (ms)", "Memory (KB)", "Date Time"];
+            const csvRows = [headers.join(",")];
+            for (const row of data) {
+                const dateTime = formatFullDate(row.creationTimeSeconds);
+                const verdict = formatVerdictDetailed(row.verdict, row.passedTestCount);
+                const memoryKB = formatMemoryKB(row.memoryConsumedBytes);
+                const values = [
+                    row.id, row.contestId, row.index,
+                    `"${(row.name || "").replace(/"/g, '""')}"`,
+                    row.rating || "", `"${verdict}"`, `"${row.programmingLanguage}"`,
+                    row.timeConsumedMillis, memoryKB, `"${dateTime}"`
+                ];
+                csvRows.push(values.join(","));
+            }
+            const bom = "\uFEFF";
+            const csvContent = bom + csvRows.join("\n");
+            downloadFile(csvContent, `cf_submissions_${settings.userHandle}.csv`, "text/csv;charset=utf-8");
+        }
+        setSyncStatus("Exported!");
+    }
+
+    const copySample = () => {
+        const inputPre = document.querySelector('.sample-test .input pre');
+        if (inputPre && inputPre.textContent) { navigator.clipboard.writeText(inputPre.textContent); alert("Sample Input Copied!"); } else { alert("No sample input found."); }
+    }
+
+    const scrollToSubmit = () => {
+        const targets = [
+            document.querySelector('form.submit-form'),
+            document.querySelector('.submitbox'),
+            document.querySelector('#sidebar .submitbox'),
+            document.querySelector('form[action*="submit"]')
+        ];
+        const target = targets.find(t => t !== null);
+        if (target) {
+            target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            const el = target as HTMLElement;
+            const oS = el.style.boxShadow; const oT = el.style.transition;
+            el.style.transition = "box-shadow 0.5s";
+            el.style.boxShadow = "0 0 20px rgba(255, 215, 0, 0.8)";
+            setTimeout(() => { el.style.boxShadow = oS; el.style.transition = oT; }, 1500);
+            const input = el.querySelector('textarea, input[type="file"], select'); if (input) (input as HTMLElement).focus();
+        } else {
+            if (document.querySelector('a[href*="/enter"]')) { if (confirm("You are not logged in. Go to login page?")) window.location.href = "https://codeforces.com/enter"; }
+            else if (window.location.href.includes('/problemset') && !window.location.href.includes('/problem/')) alert("Please go to a specific Problem page first.");
+            else alert("Submission form not found on this page.");
+        }
+    }
+
+    const addProblem = () => {
+        if (!activeProblem) return;
+        let targetId = selectedFolderId;
+        if (!targetId && myFolders.length > 0) { targetId = myFolders[0].id; setSelectedFolderId(targetId); }
+        if (!targetId) return;
+        const idx = myFolders.findIndex(f => f.id === targetId);
+        if (idx < 0) return;
+        if (myFolders[idx].problems.some(p => p.id === activeProblem.id)) { alert("Exists!"); return; }
+        const fullProblem = allProblemsCache.find(p => p.id === activeProblem.id) || activeProblem;
+        const nf = [...myFolders];
+        nf[idx].problems.push(fullProblem);
+        setMyFolders(nf);
+        chrome.storage.local.set({ "cf_my_folders": nf });
+        alert("Added!");
+    }
+
+    const deleteProblem = (folderId: string, problemId: string) => {
+        const folderIdx = myFolders.findIndex(f => f.id === folderId);
+        if (folderIdx === -1) return;
+        const newFolders = [...myFolders];
+        newFolders[folderIdx] = { ...newFolders[folderIdx], problems: newFolders[folderIdx].problems.filter(p => p.id !== problemId) };
+        setMyFolders(newFolders);
+        chrome.storage.local.set({ "cf_my_folders": newFolders });
+    }
+
+    const createFolder = () => { const n = prompt("Name:"); if (n) { const nf = [...myFolders, { id: `f_${Date.now()}`, title: n, problems: [], isCustom: true }]; setMyFolders(nf); chrome.storage.local.set({ "cf_my_folders": nf }); } }
+    const deleteFolder = (fid: string) => { if (confirm("Delete folder?")) { const nf = myFolders.filter(f => f.id !== fid); setMyFolders(nf); chrome.storage.local.set({ "cf_my_folders": nf }); } }
+
     const handleContextMenu = (e: React.MouseEvent, problem: Problem) => {
         e.preventDefault();
         setContextMenu({ visible: true, x: e.clientX, y: e.clientY, problem: problem });
@@ -401,15 +355,6 @@ const CFHelperOverlay = () => {
         nf[idx].problems.push(contextMenu.problem);
         setMyFolders(nf);
         chrome.storage.local.set({ "cf_my_folders": nf });
-    }
-
-    const copySample = () => {
-        const inputPre = document.querySelector('.sample-test .input pre');
-        if (inputPre && inputPre.textContent) { navigator.clipboard.writeText(inputPre.textContent); alert("Sample Input Copied!"); } else { alert("No sample input found."); }
-    }
-    const scrollToSubmit = () => {
-        const submitBox = document.querySelector('.submitbox') || document.querySelector('form.submit-form');
-        if (submitBox) submitBox.scrollIntoView({ behavior: 'smooth' }); else window.location.hash = "submit";
     }
 
     const handleRandomPick = () => {
@@ -429,6 +374,120 @@ const CFHelperOverlay = () => {
         if (match) window.location.href = `https://codeforces.com/problemset/problem/${match[1]}/${match[2]}`;
     }
 
+    const handleImport = () => {
+        const lines = importText.split('\n').map(l => l.trim()).filter(l => l);
+        if (lines.length < 1) return;
+        const title = lines[0]; const problems: Problem[] = [];
+        const idRegex = /(\d+)([A-Z]\d?)/i;
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i];
+            let pId = "";
+            const urlMatch = line.match(/(?:contest|gym|problemset\/problem)\/(\d+)(?:\/problem\/|\/)(\w+)/);
+            if (urlMatch) pId = `${urlMatch[1]}${urlMatch[2]}`; else { const idMatch = line.match(idRegex); if (idMatch) pId = idMatch[0].toUpperCase(); }
+            if (pId) { const fullProblem = allProblemsCache.find(p => p.id === pId) || { id: pId, name: "Imported" }; problems.push(fullProblem); }
+        }
+        const newFolders = [...myFolders, { id: `fav_${Date.now()}`, title: title, problems: problems, isCustom: true }];
+        setMyFolders(newFolders);
+        chrome.storage.local.set({ "cf_my_folders": newFolders });
+        setShowImportModal(false);
+    }
+
+    const handleExportData = () => {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(myFolders));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "cf_helper_backup.json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    }
+    const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0]; if (!file) return; const reader = new FileReader();
+        reader.onload = (event) => { try { const importedFolders = JSON.parse(event.target?.result as string); if (Array.isArray(importedFolders)) { const newFolders = importedFolders.map(f => ({ ...f, isCustom: true })); setMyFolders(newFolders); chrome.storage.local.set({ "cf_my_folders": newFolders }); alert("Data imported successfully!"); } else { alert("Invalid file format."); } } catch (err) { alert("Error parsing JSON file."); } };
+        reader.readAsText(file); e.target.value = "";
+    }
+
+    const handleScroll = () => { if (scrollTimeout.current) clearTimeout(scrollTimeout.current); scrollTimeout.current = setTimeout(() => { chrome.storage.local.set({ "cf_scroll_pos": { tags: tagsRef.current?.scrollTop || 0, myList: myListRef.current?.scrollTop || 0 } }); }, 500); }
+    const startResizeW = (e: React.MouseEvent) => { isDraggingW.current = true; startPos.current = e.clientX; startDim.current = sidebarWidth; dragValueRef.current = sidebarWidth; document.body.style.cursor = "ew-resize"; attachListeners(); }
+    const startResizeH = (e: React.MouseEvent) => { isDraggingH.current = true; startPos.current = e.clientY; startDim.current = myListHeight; dragValueRef.current = myListHeight; document.body.style.cursor = "ns-resize"; attachListeners(); }
+    const attachListeners = () => { document.addEventListener('mousemove', onMouseMove); document.addEventListener('mouseup', onMouseUp); }
+    const onMouseMove = (e: MouseEvent) => { if (isDraggingW.current) { const d = e.clientX - startPos.current; const w = Math.max(200, Math.min(600, startDim.current + d)); setSidebarWidth(w); if (isOpen) adjustBody(true, w); dragValueRef.current = w; } else if (isDraggingH.current) { const d = startPos.current - e.clientY; const h = Math.max(50, Math.min(800, startDim.current + d)); setMyListHeight(h); dragValueRef.current = h; } }
+    const onMouseUp = () => { if (isDraggingW.current) chrome.storage.local.set({ "cf_sidebar_width": dragValueRef.current }); else if (isDraggingH.current) chrome.storage.local.set({ "cf_mylist_height": dragValueRef.current }); isDraggingW.current = false; isDraggingH.current = false; document.body.style.cursor = "default"; document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); }
+    const adjustBody = (open: boolean, width: number = sidebarWidth) => { const b = document.querySelector("body"); if (b) b.style.marginLeft = open ? `${width}px` : "0px"; }
+    const toggleSidebar = () => { const s = !isOpen; setIsOpen(s); adjustBody(s); if (settings.keepOpen) chrome.storage.local.set({ "cf_sidebar_open": s }); }
+    const toggleFolder = (fid: string) => { setExpandedFolderIds(prev => { const n = prev.includes(fid) ? prev.filter(i => i !== fid) : [...prev, fid]; chrome.storage.local.set({ "cf_expanded_folders": n }); return n; }); }
+    const checkUrl = () => { const u = window.location.href; const m = u.match(/(?:contest|gym)\/(\d+)\/problem\/(\w+)/) || u.match(/problemset\/problem\/(\d+)\/(\w+)/); if (m) { let n = "Problem"; try { const t = document.title.split("-"); if (t.length >= 3) n = t[2].trim(); } catch (e) { } setActiveProblem({ id: `${m[1]}${m[2]}`, name: n, tags: [] }); } else setActiveProblem(null); }
+
+    // === Effect Hooks ===
+    useEffect(() => {
+        chrome.storage.local.get(null, (res) => {
+            if (res.cf_mylist_height) setMyListHeight(res.cf_mylist_height);
+            if (res.cf_sidebar_width) setSidebarWidth(res.cf_sidebar_width);
+            if (res.cf_expanded_folders) setExpandedFolderIds(res.cf_expanded_folders);
+            const loadedSettings = { ...settings, ...res.cf_settings };
+            if (res.cf_settings) setSettings(loadedSettings);
+            if (loadedSettings.keepOpen && res.cf_sidebar_open) { setIsOpen(true); adjustBody(true, res.cf_sidebar_width || 300); }
+            if (res.cf_active_view) setView(res.cf_active_view);
+
+            let loadedFolders: Folder[] = [];
+            if (res.cf_my_folders && res.cf_my_folders.length > 0) loadedFolders = res.cf_my_folders.map((f: any) => ({ ...f, isCustom: true }));
+            else loadedFolders = [{ id: "fav_def", title: "My Favorites", problems: [], isCustom: true }];
+            setMyFolders(loadedFolders);
+            if (loadedFolders.length > 0) setSelectedFolderId(loadedFolders[0].id);
+
+            if (res.cf_sys_folders) setSystemFolders(res.cf_sys_folders);
+            else setSystemFolders(CF_TAGS.map(tag => ({ id: `sys_${tag}`, title: tag.toUpperCase(), problems: [] })));
+
+            const now = Date.now();
+            const cacheTime = res.cf_cache_time || 0;
+            const oneDay = 24 * 60 * 60 * 1000;
+            if (res.cf_all_problems_cache && Array.isArray(res.cf_all_problems_cache) && (now - cacheTime < oneDay)) setAllProblemsCache(res.cf_all_problems_cache);
+            else fetchCFProblems();
+
+            if (res.cf_user_status) setUserStatus(res.cf_user_status);
+            if (loadedSettings.showStatus && loadedSettings.userHandle) fetchUserStatus(loadedSettings.userHandle, false);
+
+            if (res.cf_upcoming_contests) setUpcomingContests(res.cf_upcoming_contests);
+            if (res.cf_history_contests) setHistoryContests(res.cf_history_contests);
+            if (!res.cf_upcoming_contests) fetchContests(loadedSettings.userHandle);
+
+            if (res.cf_scroll_pos) setTimeout(() => { if (tagsRef.current) tagsRef.current.scrollTop = res.cf_scroll_pos.tags || 0; if (myListRef.current) myListRef.current.scrollTop = res.cf_scroll_pos.mylist || 0; }, 300);
+        });
+
+        checkUrl();
+        refreshDbCount();
+        window.addEventListener('popstate', checkUrl);
+        window.addEventListener('click', () => setContextMenu({ ...contextMenu, visible: false }));
+        const timer = setInterval(() => setNow(Date.now()), 60000);
+        return () => { window.removeEventListener('popstate', checkUrl); clearInterval(timer); }
+    }, [])
+
+    useEffect(() => {
+        const handleKey = (e: KeyboardEvent) => {
+            if (e.altKey && (e.code === 'KeyC' || e.key === 'c')) {
+                e.preventDefault();
+                setIsOpen(prev => {
+                    const next = !prev;
+                    const body = document.querySelector("body");
+                    if (body) body.style.marginLeft = next ? `${sidebarWidth}px` : "0px";
+                    if (settings.keepOpen) chrome.storage.local.set({ "cf_sidebar_open": next });
+                    return next;
+                });
+            }
+            if (e.altKey && (e.code === 'KeyS' || e.key === 's')) {
+                e.preventDefault();
+                setIsOpen(true);
+                const body = document.querySelector("body");
+                if (body) body.style.marginLeft = `${sidebarWidth}px`;
+                handleSetView('explorer');
+                setTimeout(() => document.querySelector<HTMLInputElement>('.search-input')?.focus(), 100);
+            }
+        };
+        window.addEventListener('keydown', handleKey);
+        return () => window.removeEventListener('keydown', handleKey);
+    }, [sidebarWidth, settings.keepOpen]);
+
+    // === Search Logic ===
     const searchResults = useMemo(() => {
         if (!searchText && !minRating && !maxRating) return { my: [], global: [] };
         const lower = searchText.toLowerCase();
@@ -469,6 +528,7 @@ const CFHelperOverlay = () => {
                         <div>
                             <button className={`icon-btn ${view === 'explorer' ? 'active-view-btn' : ''}`} onClick={() => handleSetView('explorer')} title="Problems">📄</button>
                             <button className={`icon-btn ${view === 'contests' ? 'active-view-btn' : ''}`} onClick={() => handleSetView('contests')} title="Contests">🏆</button>
+                            <button className={`icon-btn ${view === 'data' ? 'active-view-btn' : ''}`} onClick={() => handleSetView('data')} title="Data Manager">💾</button>
                             <button className={`icon-btn ${view === 'settings' ? 'active-view-btn' : ''}`} onClick={() => handleSetView('settings')} title="Settings">⚙️</button>
                             <button className="icon-btn" onClick={toggleSidebar}>✖</button>
                         </div>
@@ -488,14 +548,17 @@ const CFHelperOverlay = () => {
                             ) : <div style={{ padding: 10, fontSize: 11, backgroundColor: 'var(--bg-secondary)', color: 'var(--text-dim)' }}>Go to problem page to add.</div>}
 
                             <div className="search-container">
-                                <div style={{ display: 'flex', gap: 5 }}>
+                                <div className="search-input-wrapper">
                                     <input className="search-input" placeholder="Search..." value={searchText} onChange={e => setSearchText(e.target.value)} />
-                                    <button className="icon-btn" onClick={handleRandomPick} title="Random Pick">🎲</button>
+                                    {searchText && <span className="search-clear-btn" onClick={() => setSearchText("")} title="Clear">×</span>}
                                 </div>
-                                <div className="filter-row">
-                                    <input className="filter-input" placeholder="Min Rating" value={minRating} onChange={e => setMinRating(e.target.value)} type="number" />
-                                    <span className="filter-sep">-</span>
-                                    <input className="filter-input" placeholder="Max Rating" value={maxRating} onChange={e => setMaxRating(e.target.value)} type="number" />
+                                <div style={{ display: 'flex', gap: 5, marginTop: 5 }}>
+                                    <div className="filter-row" style={{ flex: 1, marginTop: 0 }}>
+                                        <input className="filter-input" placeholder="Min" value={minRating} onChange={e => setMinRating(e.target.value)} type="number" />
+                                        <span className="filter-sep">-</span>
+                                        <input className="filter-input" placeholder="Max" value={maxRating} onChange={e => setMaxRating(e.target.value)} type="number" />
+                                    </div>
+                                    <button className="icon-btn" onClick={handleRandomPick} title="Random Pick">🎲</button>
                                 </div>
                                 <div className="index-status">
                                     <span>Index: {allProblemsCache.length}</span>
@@ -553,7 +616,57 @@ const CFHelperOverlay = () => {
                         </div>
                     )}
 
-                    {view === 'settings' && (<div className="view-container settings-panel"><div className="settings-group"><div className="settings-group-title">THEME</div><div className="settings-item"><span>Background</span><input type="color" className="color-picker-input" value={settings.bgColor} onChange={e => updateSetting("bgColor", e.target.value)} /></div></div><div className="settings-group"><div className="settings-group-title">GENERAL</div><div className="settings-item"><span>Keep Open</span><input type="checkbox" checked={settings.keepOpen} onChange={e => updateSetting("keepOpen", e.target.checked)} /></div><div className="settings-item"><span>Show System Tags</span><input type="checkbox" checked={settings.showSystemTags} onChange={e => updateSetting("showSystemTags", e.target.checked)} /></div></div><div className="settings-group"><div className="settings-group-title">DISPLAY</div><div className="settings-item"><span>Show Tags</span><input type="checkbox" checked={settings.showTags} onChange={e => updateSetting("showTags", e.target.checked)} /></div><div className="settings-item"><span>Blur Tags (Spoiler)</span><input type="checkbox" checked={settings.blurTags} onChange={e => updateSetting("blurTags", e.target.checked)} /></div><div className="settings-item"><span>Show Status</span><input type="checkbox" checked={settings.showStatus} onChange={e => updateSetting("showStatus", e.target.checked)} /></div>{settings.showStatus && (<div className="settings-item"><span>Handle</span><div style={{ display: 'flex', alignItems: 'center' }}><input className="cf-input" value={settings.userHandle} onChange={e => updateSetting("userHandle", e.target.value)} /><button className="sync-btn" onClick={() => fetchUserStatus(settings.userHandle, true)}>Sync</button></div></div>)}</div><div className="settings-group"><div className="settings-group-title">DATA</div><button className="backup-btn" onClick={handleExportData}>Export</button><div style={{ marginTop: 10 }}><button className="backup-btn" onClick={() => fileInputRef.current?.click()}>Import</button><input type="file" ref={fileInputRef} style={{ display: 'none' }} accept=".json" onChange={handleImportFile} /></div></div></div>)}
+                    {view === 'data' && (
+                        <div className="view-container data-panel">
+                            <div className="settings-group-title">LOCAL DATABASE</div>
+                            <div className="data-card">
+                                <div className="data-desc">Records Stored</div>
+                                <div className="data-stat">{dbCount}</div>
+                                <div className="data-desc">{syncStatus || (dbCount > 0 ? "Synced" : "Not synced")}</div>
+                                <div className="sync-actions">
+                                    <button className="sync-btn" onClick={handleSyncData}>🔄 Sync Submissions</button>
+                                    <button className="sync-btn" style={{ color: '#ff6b6b', borderColor: '#ff6b6b' }} onClick={handleClearDb}>🗑️ Clear DB</button>
+                                </div>
+                            </div>
+
+                            <div className="settings-group" style={{ marginTop: 15, background: 'var(--bg-secondary)', padding: 10, borderRadius: 4, border: '1px solid var(--border-color)' }}>
+                                <div className="settings-group-title">EXPORT OPTIONS</div>
+                                <div className="settings-item">
+                                    <span>Format</span>
+                                    <select className="cf-input" style={{ width: 80 }} value={exportFormat} onChange={e => setExportFormat(e.target.value as "csv" | "json")}>
+                                        <option value="csv">CSV (Excel)</option>
+                                        <option value="json">JSON</option>
+                                    </select>
+                                </div>
+                                <div className="settings-item">
+                                    <span>Only AC</span>
+                                    <input type="checkbox" checked={exportOnlyAC} onChange={e => setExportOnlyAC(e.target.checked)} />
+                                </div>
+                                <button className="backup-btn" style={{ marginTop: 10, background: 'var(--accent-color)', color: 'white', border: 'none' }} onClick={handleExportHistory}>📤 Export History</button>
+                            </div>
+
+                            {localPreview.length > 0 && (
+                                <div className="data-table-container">
+                                    <div className="data-header">Recent Activity ({localPreview.length})</div>
+                                    <div className="data-list">
+                                        {localPreview.map((sub: any) => (
+                                            <div key={sub.id} className="data-row" onClick={() => window.location.href = `https://codeforces.com/contest/${sub.contestId}/submission/${sub.id}`}>
+                                                <div className="data-col-status">
+                                                    {sub.verdict === "OK" ? <span className="data-verdict-ok">✅</span> : <span className="data-verdict-wrong">⚠️</span>}
+                                                </div>
+                                                <div className="data-col-info">
+                                                    <div className="data-title">{sub.contestId}{sub.index} - {sub.name}</div>
+                                                    <div className="data-meta">{formatDateTime(sub.creationTimeSeconds)} • {sub.programmingLanguage}</div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {view === 'settings' && (<div className="view-container settings-panel"><div className="settings-group"><div className="settings-group-title">THEME</div><div className="settings-item"><span>Background</span><input type="color" className="color-picker-input" value={settings.bgColor} onChange={e => updateSetting("bgColor", e.target.value)} /></div></div><div className="settings-group"><div className="settings-group-title">GENERAL</div><div className="settings-item"><span>Keep Open</span><input type="checkbox" checked={settings.keepOpen} onChange={e => updateSetting("keepOpen", e.target.checked)} /></div><div className="settings-item"><span>Show System Tags</span><input type="checkbox" checked={settings.showSystemTags} onChange={e => updateSetting("showSystemTags", e.target.checked)} /></div></div><div className="settings-group"><div className="settings-group-title">DISPLAY</div><div className="settings-item"><span>Show Tags</span><input type="checkbox" checked={settings.showTags} onChange={e => updateSetting("showTags", e.target.checked)} /></div><div className="settings-item"><span>Blur Tags (Spoiler)</span><input type="checkbox" checked={settings.blurTags} onChange={e => updateSetting("blurTags", e.target.checked)} /></div><div className="settings-item"><span>Show Status</span><input type="checkbox" checked={settings.showStatus} onChange={e => updateSetting("showStatus", e.target.checked)} /></div>{settings.showStatus && (<div className="settings-item"><span>Handle</span><div style={{ display: 'flex', alignItems: 'center' }}><input className="cf-input" value={settings.userHandle} onChange={e => updateSetting("userHandle", e.target.value)} onBlur={() => fetchUserStatus(settings.userHandle)} /><button className="sync-btn" onClick={() => fetchUserStatus(settings.userHandle, true)}>Sync</button></div></div>)}</div><div className="settings-group"><div className="settings-group-title">DATA</div><button className="backup-btn" onClick={handleExportData}>Export</button><div style={{ marginTop: 10 }}><button className="backup-btn" onClick={() => fileInputRef.current?.click()}>Import</button><input type="file" ref={fileInputRef} style={{ display: 'none' }} accept=".json" onChange={handleImportFile} /></div></div></div>)}
                     {showImportModal && <div className="modal-overlay"><div className="modal-content"><div className="modal-title">Import List</div><textarea className="import-textarea" value={importText} onChange={e => setImportText(e.target.value)}></textarea><div className="modal-actions"><button className="btn-secondary" onClick={() => setShowImportModal(false)}>Cancel</button><button className="btn-primary" onClick={handleImport}>Import</button></div></div></div>}
 
                     {contextMenu.visible && (

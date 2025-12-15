@@ -10,14 +10,15 @@
     "package": "plasmo package"
   },
   "dependencies": {
+    "idb": "^8.0.3",
     "react": "18.2.0",
     "react-dom": "18.2.0"
   },
   "devDependencies": {
+    "@types/chrome": "0.0.258",
     "@types/react": "18.2.0",
     "@types/react-dom": "18.2.0",
-    "@types/chrome": "0.0.258",
-    "plasmo": "latest",
+    "plasmo": "^0.90.5",
     "typescript": "5.2.2"
   },
   "manifest": {
