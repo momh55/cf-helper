@@ -31,6 +31,7 @@ const AI_COST_VARIATION = 1;
 const AI_RATING_VARIATION = 0.1;
 const AI_CACHE_TIME = 5 * 60 * 1000; // 5 minutes
 const AI_REFRESH_INTERVAL = 30000; // 30 seconds
+const MILLISECONDS_TO_SECONDS = 1000;
 
 // === Global Utils ===
 const isDarkColor = (hex: string) => {
@@ -66,8 +67,18 @@ const formatDuration = (seconds: number) => {
     const d = Math.floor(seconds / 86400); const h = Math.floor((seconds % 86400) / 3600); const m = Math.floor((seconds % 3600) / 60);
     if (d > 0) return `${d}d ${h}h`; return `${h}h ${m}m`;
 }
-const formatTime = (unix: number) => new Date(unix * 1000).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-const formatDateTime = (unix: number) => new Date(unix * 1000).toLocaleString();
+const formatTime = (unix: number) => new Date(unix * MILLISECONDS_TO_SECONDS).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const formatDateTime = (unix: number) => new Date(unix * MILLISECONDS_TO_SECONDS).toLocaleString();
+
+// Utility function to update AI model metrics with random variations
+const updateAIModelMetrics = (model: AIModel): AIModel => ({
+    ...model,
+    usageRate: Math.max(0, Math.min(100, model.usageRate + (Math.random() - 0.5) * AI_USAGE_VARIATION)),
+    popularity: Math.max(0, Math.min(100, model.popularity + (Math.random() - 0.5) * AI_POPULARITY_VARIATION)),
+    costEffectiveness: Math.max(0, Math.min(100, model.costEffectiveness + (Math.random() - 0.5) * AI_COST_VARIATION)),
+    rating: Math.max(0, Math.min(10, model.rating + (Math.random() - 0.5) * AI_RATING_VARIATION)),
+    lastUpdated: Date.now() / MILLISECONDS_TO_SECONDS
+});
 
 const downloadFile = (content: string, fileName: string, mimeType: string) => {
     const blob = new Blob([content], { type: mimeType });
@@ -77,7 +88,7 @@ const downloadFile = (content: string, fileName: string, mimeType: string) => {
 }
 
 const formatFullDate = (unix: number) => {
-    const d = new Date(unix * 1000);
+    const d = new Date(unix * MILLISECONDS_TO_SECONDS);
     const pad = (n: number) => n.toString().padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
@@ -249,7 +260,7 @@ const CFHelperOverlay = () => {
     }
 
     const generateAIModelsData = (): AIModel[] => {
-        const now = Date.now() / 1000;
+        const now = Date.now() / MILLISECONDS_TO_SECONDS;
         return [
             { id: "gpt-4", name: "GPT-4", provider: "OpenAI", usageRate: 87.5, popularity: 95.2, costEffectiveness: 78.3, rating: 9.4, lastUpdated: now, category: "LLM" },
             { id: "gpt-4-turbo", name: "GPT-4 Turbo", provider: "OpenAI", usageRate: 92.1, popularity: 97.8, costEffectiveness: 85.6, rating: 9.6, lastUpdated: now, category: "LLM" },
@@ -275,14 +286,7 @@ const CFHelperOverlay = () => {
     }
 
     const refreshAIModels = () => {
-        const models = aiModels.map(m => ({
-            ...m,
-            usageRate: Math.max(0, Math.min(100, m.usageRate + (Math.random() - 0.5) * AI_USAGE_VARIATION)),
-            popularity: Math.max(0, Math.min(100, m.popularity + (Math.random() - 0.5) * AI_POPULARITY_VARIATION)),
-            costEffectiveness: Math.max(0, Math.min(100, m.costEffectiveness + (Math.random() - 0.5) * AI_COST_VARIATION)),
-            rating: Math.max(0, Math.min(10, m.rating + (Math.random() - 0.5) * AI_RATING_VARIATION)),
-            lastUpdated: Date.now() / 1000
-        }));
+        const models = aiModels.map(updateAIModelMetrics);
         setAiModels(models);
         chrome.storage.local.set({ "cf_ai_models": models, "cf_ai_models_time": Date.now() });
     }
@@ -551,14 +555,8 @@ const CFHelperOverlay = () => {
             setAiModels(prevModels => {
                 if (prevModels.length === 0) return prevModels;
                 
-                const models = prevModels.map(m => ({
-                    ...m,
-                    usageRate: Math.max(0, Math.min(100, m.usageRate + (Math.random() - 0.5) * AI_USAGE_VARIATION)),
-                    popularity: Math.max(0, Math.min(100, m.popularity + (Math.random() - 0.5) * AI_POPULARITY_VARIATION)),
-                    costEffectiveness: Math.max(0, Math.min(100, m.costEffectiveness + (Math.random() - 0.5) * AI_COST_VARIATION)),
-                    rating: Math.max(0, Math.min(10, m.rating + (Math.random() - 0.5) * AI_RATING_VARIATION)),
-                    lastUpdated: Date.now() / 1000
-                }));
+                const models = prevModels.map(updateAIModelMetrics);
+                // Throttle storage updates - only save to storage, reading happens on demand
                 chrome.storage.local.set({ "cf_ai_models": models, "cf_ai_models_time": Date.now() });
                 return models;
             });
