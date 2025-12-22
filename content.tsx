@@ -24,6 +24,14 @@ type AIModel = { id: string; name: string; provider: string; usageRate: number; 
 
 const CF_TAGS = ["dp", "greedy", "math", "graphs", "data structures", "sortings", "binary search", "dfs and similar", "trees", "strings", "number theory", "geometry", "two pointers", "dsu", "bitmasks", "constructive algorithms", "implementation"];
 
+// AI Leaderboard update constants
+const AI_USAGE_VARIATION = 2;
+const AI_POPULARITY_VARIATION = 1.5;
+const AI_COST_VARIATION = 1;
+const AI_RATING_VARIATION = 0.1;
+const AI_CACHE_TIME = 5 * 60 * 1000; // 5 minutes
+const AI_REFRESH_INTERVAL = 30000; // 30 seconds
+
 // === Global Utils ===
 const isDarkColor = (hex: string) => {
     const c = hex.substring(1); const rgb = parseInt(c, 16);
@@ -217,25 +225,25 @@ const CFHelperOverlay = () => {
     const fetchAIModels = async () => {
         setIsLoading(true);
         try {
-            // Try to fetch from cache first
-            chrome.storage.local.get(["cf_ai_models", "cf_ai_models_time"], (res) => {
-                const now = Date.now();
-                const cacheTime = res.cf_ai_models_time || 0;
-                const fiveMinutes = 5 * 60 * 1000;
-                
-                if (res.cf_ai_models && Array.isArray(res.cf_ai_models) && (now - cacheTime < fiveMinutes)) {
-                    setAiModels(res.cf_ai_models);
-                    setIsLoading(false);
-                } else {
-                    // Generate initial AI models data (simulated real-time data)
-                    const models = generateAIModelsData();
-                    setAiModels(models);
-                    chrome.storage.local.set({ "cf_ai_models": models, "cf_ai_models_time": now });
-                    setIsLoading(false);
-                }
+            // Try to fetch from cache first using promise wrapper
+            const res = await new Promise<any>((resolve) => {
+                chrome.storage.local.get(["cf_ai_models", "cf_ai_models_time"], resolve);
             });
+            
+            const now = Date.now();
+            const cacheTime = res.cf_ai_models_time || 0;
+            
+            if (res.cf_ai_models && Array.isArray(res.cf_ai_models) && (now - cacheTime < AI_CACHE_TIME)) {
+                setAiModels(res.cf_ai_models);
+            } else {
+                // Generate initial AI models data (simulated real-time data)
+                const models = generateAIModelsData();
+                setAiModels(models);
+                chrome.storage.local.set({ "cf_ai_models": models, "cf_ai_models_time": now });
+            }
         } catch (e) { 
             console.error(e); 
+        } finally {
             setIsLoading(false);
         }
     }
@@ -269,10 +277,10 @@ const CFHelperOverlay = () => {
     const refreshAIModels = () => {
         const models = aiModels.map(m => ({
             ...m,
-            usageRate: Math.max(0, Math.min(100, m.usageRate + (Math.random() - 0.5) * 2)),
-            popularity: Math.max(0, Math.min(100, m.popularity + (Math.random() - 0.5) * 1.5)),
-            costEffectiveness: Math.max(0, Math.min(100, m.costEffectiveness + (Math.random() - 0.5) * 1)),
-            rating: Math.max(0, Math.min(10, m.rating + (Math.random() - 0.5) * 0.1)),
+            usageRate: Math.max(0, Math.min(100, m.usageRate + (Math.random() - 0.5) * AI_USAGE_VARIATION)),
+            popularity: Math.max(0, Math.min(100, m.popularity + (Math.random() - 0.5) * AI_POPULARITY_VARIATION)),
+            costEffectiveness: Math.max(0, Math.min(100, m.costEffectiveness + (Math.random() - 0.5) * AI_COST_VARIATION)),
+            rating: Math.max(0, Math.min(10, m.rating + (Math.random() - 0.5) * AI_RATING_VARIATION)),
             lastUpdated: Date.now() / 1000
         }));
         setAiModels(models);
@@ -529,18 +537,37 @@ const CFHelperOverlay = () => {
         window.addEventListener('popstate', checkUrl);
         window.addEventListener('click', () => setContextMenu({ ...contextMenu, visible: false }));
         const timer = setInterval(() => setNow(Date.now()), 60000);
-        // Auto-refresh AI models every 30 seconds when on AI leaderboard view
-        const aiRefreshTimer = setInterval(() => {
-            if (view === 'ai-leaderboard' && aiModels.length > 0) {
-                refreshAIModels();
-            }
-        }, 30000);
         return () => { 
             window.removeEventListener('popstate', checkUrl); 
             clearInterval(timer); 
-            clearInterval(aiRefreshTimer);
         }
-    }, [view, aiModels])
+    }, [])
+
+    // Separate effect for AI model auto-refresh
+    useEffect(() => {
+        if (view !== 'ai-leaderboard') return;
+        
+        const aiRefreshTimer = setInterval(() => {
+            setAiModels(prevModels => {
+                if (prevModels.length === 0) return prevModels;
+                
+                const models = prevModels.map(m => ({
+                    ...m,
+                    usageRate: Math.max(0, Math.min(100, m.usageRate + (Math.random() - 0.5) * AI_USAGE_VARIATION)),
+                    popularity: Math.max(0, Math.min(100, m.popularity + (Math.random() - 0.5) * AI_POPULARITY_VARIATION)),
+                    costEffectiveness: Math.max(0, Math.min(100, m.costEffectiveness + (Math.random() - 0.5) * AI_COST_VARIATION)),
+                    rating: Math.max(0, Math.min(10, m.rating + (Math.random() - 0.5) * AI_RATING_VARIATION)),
+                    lastUpdated: Date.now() / 1000
+                }));
+                chrome.storage.local.set({ "cf_ai_models": models, "cf_ai_models_time": Date.now() });
+                return models;
+            });
+        }, AI_REFRESH_INTERVAL);
+        
+        return () => {
+            clearInterval(aiRefreshTimer);
+        };
+    }, [view]);
 
     useEffect(() => {
         const handleKey = (e: KeyboardEvent) => {
