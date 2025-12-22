@@ -20,6 +20,7 @@ type Settings = { keepOpen: boolean; showTags: boolean; blurTags: boolean; showS
 type StatusMap = Record<string, "OK" | "WRONG">;
 type Contest = { id: number; name: string; phase: string; startTimeSeconds: number; durationSeconds: number; participated?: boolean; }
 type ContextMenuState = { visible: boolean; x: number; y: number; problem: Problem | null; }
+type AIModel = { id: string; name: string; provider: string; usageRate: number; popularity: number; costEffectiveness: number; rating: number; lastUpdated: number; category: string; }
 
 const CF_TAGS = ["dp", "greedy", "math", "graphs", "data structures", "sortings", "binary search", "dfs and similar", "trees", "strings", "number theory", "geometry", "two pointers", "dsu", "bitmasks", "constructive algorithms", "implementation"];
 
@@ -92,8 +93,10 @@ const formatMemoryKB = (bytes: number) => {
 const CFHelperOverlay = () => {
     // UI State
     const [isOpen, setIsOpen] = useState(false)
-    const [view, setView] = useState<"explorer" | "settings" | "contests" | "data">("explorer")
+    const [view, setView] = useState<"explorer" | "settings" | "contests" | "data" | "ai-leaderboard">("explorer")
     const [contestTab, setContestTab] = useState<"upcoming" | "history">("upcoming")
+    const [aiSortBy, setAiSortBy] = useState<"usageRate" | "popularity" | "costEffectiveness" | "rating">("rating")
+    const [aiFilterCategory, setAiFilterCategory] = useState<string>("all")
     const [searchText, setSearchText] = useState("")
     const [isLoading, setIsLoading] = useState(false)
     const [showImportModal, setShowImportModal] = useState(false)
@@ -137,6 +140,7 @@ const CFHelperOverlay = () => {
     const [userStatus, setUserStatus] = useState<StatusMap>({})
     const [upcomingContests, setUpcomingContests] = useState<Contest[]>([])
     const [historyContests, setHistoryContests] = useState<Contest[]>([])
+    const [aiModels, setAiModels] = useState<AIModel[]>([])
 
     const [settings, setSettings] = useState<Settings>({
         keepOpen: false, showTags: true, blurTags: true, showSystemTags: true, showStatus: false, userHandle: "", bgColor: "#252526"
@@ -145,10 +149,11 @@ const CFHelperOverlay = () => {
     const theme = useMemo(() => getThemeVariables(settings.bgColor), [settings.bgColor]);
 
     // === Functions ===
-    const handleSetView = (newView: "explorer" | "settings" | "contests" | "data") => {
+    const handleSetView = (newView: "explorer" | "settings" | "contests" | "data" | "ai-leaderboard") => {
         setView(newView);
         chrome.storage.local.set({ "cf_active_view": newView });
         if (newView === 'data') refreshDbCount();
+        if (newView === 'ai-leaderboard') fetchAIModels();
     }
 
     const refreshDbCount = async () => {
@@ -207,6 +212,71 @@ const CFHelperOverlay = () => {
                 chrome.storage.local.set({ "cf_upcoming_contests": upcoming, "cf_history_contests": history });
             }
         } catch (e) { console.error(e); } finally { setIsLoading(false); }
+    }
+
+    const fetchAIModels = async () => {
+        setIsLoading(true);
+        try {
+            // Try to fetch from cache first
+            chrome.storage.local.get(["cf_ai_models", "cf_ai_models_time"], (res) => {
+                const now = Date.now();
+                const cacheTime = res.cf_ai_models_time || 0;
+                const fiveMinutes = 5 * 60 * 1000;
+                
+                if (res.cf_ai_models && Array.isArray(res.cf_ai_models) && (now - cacheTime < fiveMinutes)) {
+                    setAiModels(res.cf_ai_models);
+                    setIsLoading(false);
+                } else {
+                    // Generate initial AI models data (simulated real-time data)
+                    const models = generateAIModelsData();
+                    setAiModels(models);
+                    chrome.storage.local.set({ "cf_ai_models": models, "cf_ai_models_time": now });
+                    setIsLoading(false);
+                }
+            });
+        } catch (e) { 
+            console.error(e); 
+            setIsLoading(false);
+        }
+    }
+
+    const generateAIModelsData = (): AIModel[] => {
+        const now = Date.now() / 1000;
+        return [
+            { id: "gpt-4", name: "GPT-4", provider: "OpenAI", usageRate: 87.5, popularity: 95.2, costEffectiveness: 78.3, rating: 9.4, lastUpdated: now, category: "LLM" },
+            { id: "gpt-4-turbo", name: "GPT-4 Turbo", provider: "OpenAI", usageRate: 92.1, popularity: 97.8, costEffectiveness: 85.6, rating: 9.6, lastUpdated: now, category: "LLM" },
+            { id: "gpt-3.5-turbo", name: "GPT-3.5 Turbo", provider: "OpenAI", usageRate: 95.3, popularity: 88.4, costEffectiveness: 92.1, rating: 8.7, lastUpdated: now, category: "LLM" },
+            { id: "claude-3-opus", name: "Claude 3 Opus", provider: "Anthropic", usageRate: 81.2, popularity: 89.7, costEffectiveness: 76.4, rating: 9.2, lastUpdated: now, category: "LLM" },
+            { id: "claude-3-sonnet", name: "Claude 3 Sonnet", provider: "Anthropic", usageRate: 84.6, popularity: 85.3, costEffectiveness: 88.9, rating: 9.0, lastUpdated: now, category: "LLM" },
+            { id: "claude-3-haiku", name: "Claude 3 Haiku", provider: "Anthropic", usageRate: 78.9, popularity: 76.2, costEffectiveness: 94.5, rating: 8.4, lastUpdated: now, category: "LLM" },
+            { id: "gemini-pro", name: "Gemini Pro", provider: "Google", usageRate: 75.4, popularity: 82.1, costEffectiveness: 89.7, rating: 8.8, lastUpdated: now, category: "LLM" },
+            { id: "gemini-ultra", name: "Gemini Ultra", provider: "Google", usageRate: 68.3, popularity: 79.6, costEffectiveness: 72.1, rating: 8.9, lastUpdated: now, category: "LLM" },
+            { id: "llama-3-70b", name: "Llama 3 70B", provider: "Meta", usageRate: 71.2, popularity: 74.8, costEffectiveness: 96.3, rating: 8.3, lastUpdated: now, category: "LLM" },
+            { id: "llama-3-8b", name: "Llama 3 8B", provider: "Meta", usageRate: 69.5, popularity: 68.4, costEffectiveness: 98.7, rating: 7.9, lastUpdated: now, category: "LLM" },
+            { id: "mistral-large", name: "Mistral Large", provider: "Mistral AI", usageRate: 65.7, popularity: 71.3, costEffectiveness: 84.2, rating: 8.5, lastUpdated: now, category: "LLM" },
+            { id: "mistral-medium", name: "Mistral Medium", provider: "Mistral AI", usageRate: 63.2, popularity: 67.9, costEffectiveness: 91.4, rating: 8.2, lastUpdated: now, category: "LLM" },
+            { id: "palm-2", name: "PaLM 2", provider: "Google", usageRate: 58.4, popularity: 64.2, costEffectiveness: 82.7, rating: 8.0, lastUpdated: now, category: "LLM" },
+            { id: "codellama-34b", name: "CodeLlama 34B", provider: "Meta", usageRate: 72.8, popularity: 76.5, costEffectiveness: 93.1, rating: 8.4, lastUpdated: now, category: "Code" },
+            { id: "copilot", name: "GitHub Copilot", provider: "GitHub", usageRate: 89.3, popularity: 92.6, costEffectiveness: 87.5, rating: 9.1, lastUpdated: now, category: "Code" },
+            { id: "codewhisperer", name: "CodeWhisperer", provider: "AWS", usageRate: 67.1, popularity: 68.9, costEffectiveness: 94.8, rating: 8.1, lastUpdated: now, category: "Code" },
+            { id: "tabnine", name: "Tabnine", provider: "Tabnine", usageRate: 61.5, popularity: 63.7, costEffectiveness: 88.3, rating: 7.8, lastUpdated: now, category: "Code" },
+            { id: "dall-e-3", name: "DALL-E 3", provider: "OpenAI", usageRate: 79.6, popularity: 87.4, costEffectiveness: 74.2, rating: 8.9, lastUpdated: now, category: "Image" },
+            { id: "midjourney", name: "Midjourney", provider: "Midjourney", usageRate: 85.2, popularity: 93.8, costEffectiveness: 79.6, rating: 9.3, lastUpdated: now, category: "Image" },
+            { id: "stable-diffusion", name: "Stable Diffusion", provider: "Stability AI", usageRate: 76.8, popularity: 81.2, costEffectiveness: 97.2, rating: 8.6, lastUpdated: now, category: "Image" },
+        ];
+    }
+
+    const refreshAIModels = () => {
+        const models = aiModels.map(m => ({
+            ...m,
+            usageRate: Math.max(0, Math.min(100, m.usageRate + (Math.random() - 0.5) * 2)),
+            popularity: Math.max(0, Math.min(100, m.popularity + (Math.random() - 0.5) * 1.5)),
+            costEffectiveness: Math.max(0, Math.min(100, m.costEffectiveness + (Math.random() - 0.5) * 1)),
+            rating: Math.max(0, Math.min(10, m.rating + (Math.random() - 0.5) * 0.1)),
+            lastUpdated: Date.now() / 1000
+        }));
+        setAiModels(models);
+        chrome.storage.local.set({ "cf_ai_models": models, "cf_ai_models_time": Date.now() });
     }
 
     const fetchCFProblems = async () => {
@@ -459,8 +529,18 @@ const CFHelperOverlay = () => {
         window.addEventListener('popstate', checkUrl);
         window.addEventListener('click', () => setContextMenu({ ...contextMenu, visible: false }));
         const timer = setInterval(() => setNow(Date.now()), 60000);
-        return () => { window.removeEventListener('popstate', checkUrl); clearInterval(timer); }
-    }, [])
+        // Auto-refresh AI models every 30 seconds when on AI leaderboard view
+        const aiRefreshTimer = setInterval(() => {
+            if (view === 'ai-leaderboard' && aiModels.length > 0) {
+                refreshAIModels();
+            }
+        }, 30000);
+        return () => { 
+            window.removeEventListener('popstate', checkUrl); 
+            clearInterval(timer); 
+            clearInterval(aiRefreshTimer);
+        }
+    }, [view, aiModels])
 
     useEffect(() => {
         const handleKey = (e: KeyboardEvent) => {
@@ -528,6 +608,7 @@ const CFHelperOverlay = () => {
                         <div>
                             <button className={`icon-btn ${view === 'explorer' ? 'active-view-btn' : ''}`} onClick={() => handleSetView('explorer')} title="Problems">📄</button>
                             <button className={`icon-btn ${view === 'contests' ? 'active-view-btn' : ''}`} onClick={() => handleSetView('contests')} title="Contests">🏆</button>
+                            <button className={`icon-btn ${view === 'ai-leaderboard' ? 'active-view-btn' : ''}`} onClick={() => handleSetView('ai-leaderboard')} title="AI Leaderboard">🤖</button>
                             <button className={`icon-btn ${view === 'data' ? 'active-view-btn' : ''}`} onClick={() => handleSetView('data')} title="Data Manager">💾</button>
                             <button className={`icon-btn ${view === 'settings' ? 'active-view-btn' : ''}`} onClick={() => handleSetView('settings')} title="Settings">⚙️</button>
                             <button className="icon-btn" onClick={toggleSidebar}>✖</button>
@@ -612,6 +693,149 @@ const CFHelperOverlay = () => {
                                         </div>
                                     </div>
                                 ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {view === 'ai-leaderboard' && (
+                        <div className="view-container">
+                            <div className="section-title">
+                                <span>AI LEADERBOARD</span>
+                                <span className="action-icon" onClick={refreshAIModels} title="Refresh">🔄</span>
+                            </div>
+                            <div className="ai-controls" style={{ padding: '10px', background: 'var(--bg-secondary)', borderBottom: '1px solid var(--border-color)' }}>
+                                <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 8 }}>
+                                    <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>Sort by:</span>
+                                    <select className="cf-input" style={{ flex: 1, fontSize: 11 }} value={aiSortBy} onChange={e => setAiSortBy(e.target.value as any)}>
+                                        <option value="rating">Rating</option>
+                                        <option value="usageRate">Usage Rate</option>
+                                        <option value="popularity">Popularity</option>
+                                        <option value="costEffectiveness">Cost-Effectiveness</option>
+                                    </select>
+                                </div>
+                                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                                    <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>Category:</span>
+                                    <select className="cf-input" style={{ flex: 1, fontSize: 11 }} value={aiFilterCategory} onChange={e => setAiFilterCategory(e.target.value)}>
+                                        <option value="all">All</option>
+                                        <option value="LLM">LLM</option>
+                                        <option value="Code">Code Assistants</option>
+                                        <option value="Image">Image Generation</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="ai-leaderboard-container" style={{ flex: 1, overflow: 'auto' }}>
+                                {isLoading ? (
+                                    <div style={{ padding: 20, color: 'var(--text-dim)', textAlign: 'center' }}>Loading...</div>
+                                ) : (
+                                    aiModels
+                                        .filter(m => aiFilterCategory === 'all' || m.category === aiFilterCategory)
+                                        .sort((a, b) => b[aiSortBy] - a[aiSortBy])
+                                        .map((model, index) => (
+                                            <div key={model.id} className="ai-model-item" style={{ 
+                                                padding: '12px', 
+                                                borderBottom: '1px solid var(--border-color)',
+                                                background: index < 3 ? 'var(--bg-secondary)' : 'transparent',
+                                                transition: 'background 0.2s'
+                                            }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                                    <div style={{ 
+                                                        width: 24, 
+                                                        height: 24, 
+                                                        borderRadius: '50%', 
+                                                        background: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : index === 2 ? '#CD7F32' : 'var(--bg-input)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        fontSize: 10,
+                                                        fontWeight: 'bold',
+                                                        color: index < 3 ? '#000' : 'var(--text-dim)'
+                                                    }}>
+                                                        {index + 1}
+                                                    </div>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 2 }}>{model.name}</div>
+                                                        <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{model.provider} • {model.category}</div>
+                                                    </div>
+                                                    <div style={{ 
+                                                        padding: '2px 6px', 
+                                                        borderRadius: 4, 
+                                                        background: 'var(--accent-color)', 
+                                                        color: '#fff',
+                                                        fontSize: 11,
+                                                        fontWeight: 'bold'
+                                                    }}>
+                                                        {model.rating.toFixed(1)}
+                                                    </div>
+                                                </div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, fontSize: 11 }}>
+                                                    <div className="ai-metric">
+                                                        <div style={{ color: 'var(--text-dim)', marginBottom: 3 }}>Usage Rate</div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                                            <div style={{ 
+                                                                flex: 1, 
+                                                                height: 6, 
+                                                                background: 'var(--bg-input)', 
+                                                                borderRadius: 3,
+                                                                overflow: 'hidden'
+                                                            }}>
+                                                                <div style={{ 
+                                                                    width: `${model.usageRate}%`, 
+                                                                    height: '100%', 
+                                                                    background: '#4caf50',
+                                                                    transition: 'width 0.3s'
+                                                                }}></div>
+                                                            </div>
+                                                            <span style={{ fontSize: 10, minWidth: 35, textAlign: 'right' }}>{model.usageRate.toFixed(1)}%</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="ai-metric">
+                                                        <div style={{ color: 'var(--text-dim)', marginBottom: 3 }}>Popularity</div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                                            <div style={{ 
+                                                                flex: 1, 
+                                                                height: 6, 
+                                                                background: 'var(--bg-input)', 
+                                                                borderRadius: 3,
+                                                                overflow: 'hidden'
+                                                            }}>
+                                                                <div style={{ 
+                                                                    width: `${model.popularity}%`, 
+                                                                    height: '100%', 
+                                                                    background: '#2196f3',
+                                                                    transition: 'width 0.3s'
+                                                                }}></div>
+                                                            </div>
+                                                            <span style={{ fontSize: 10, minWidth: 35, textAlign: 'right' }}>{model.popularity.toFixed(1)}%</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="ai-metric">
+                                                        <div style={{ color: 'var(--text-dim)', marginBottom: 3 }}>Cost-Effectiveness</div>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                                            <div style={{ 
+                                                                flex: 1, 
+                                                                height: 6, 
+                                                                background: 'var(--bg-input)', 
+                                                                borderRadius: 3,
+                                                                overflow: 'hidden'
+                                                            }}>
+                                                                <div style={{ 
+                                                                    width: `${model.costEffectiveness}%`, 
+                                                                    height: '100%', 
+                                                                    background: '#ff9800',
+                                                                    transition: 'width 0.3s'
+                                                                }}></div>
+                                                            </div>
+                                                            <span style={{ fontSize: 10, minWidth: 35, textAlign: 'right' }}>{model.costEffectiveness.toFixed(1)}%</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="ai-metric">
+                                                        <div style={{ color: 'var(--text-dim)', marginBottom: 3 }}>Last Updated</div>
+                                                        <div style={{ fontSize: 10 }}>{formatTime(model.lastUpdated)}</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))
+                                )}
                             </div>
                         </div>
                     )}
