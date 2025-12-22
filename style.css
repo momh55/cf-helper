@@ -862,3 +862,26 @@ input:checked+.slider:before {
 .data-verdict-wrong {
     color: #ff6b6b;
 }
+
+/* AI Leaderboard Styles */
+.ai-controls {
+    flex-shrink: 0;
+}
+
+.ai-leaderboard-container {
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+.ai-model-item {
+    cursor: default;
+}
+
+.ai-model-item:hover {
+    background: var(--bg-hover) !important;
+}
+
+.ai-metric {
+    display: flex;
+    flex-direction: column;
+}
